@@ -29,24 +29,34 @@ log()
 
 check_row()
 {
-    HOST=$1
-    DATE=`echo "$2 $3"`
-    log "[CHECK_ROW] Comprobando si existe fila el: $DATE para el host: $HOST tipo: $4"
-    RESULT=`mysql -s -h kpis -u kpis -ppush kpisdb -e "select fecha from kpisdb.sistema where host = $HOST and fecha = $DATE and tipo = $4  ORDER BY fecha DESC LIMIT 1" -N`
-    if [ "$?" -eq 0 ]; then
-        if [ -n "$RESULT" ]; then
-        #### ROW NOT EMPTY
-            log "[CHECK_ROW] KPI insertado el: $DATE para el host $HOST tipo: $4"
-            CHK_ROW=0
-        else 
-        #### ROW EMPTY
-            log "[CHECK_ROW] KPI NO insertado el: $DATE para el host $HOST tipo: $4"
-            CHK_ROW=1
-        fi
-    else
-         log "[CHECK_ROW] ERROR conectando con $MYSQL_HOST a la base de datos: $MYSQL_DATABASE"
-         exit 1
-    fi
+    HOST=$2
+    DATE=`echo "$3 $4"`
+    TABLA=$1
+    read -p "Pausa"
+    case $TABLA in
+        "sistema") 
+             log "[CHECK_ROW] Comprobando si existe fila el: $DATE para el host: $HOST tipo: $5"
+             RESULT=`mysql -s -h kpis -u kpis -ppush kpisdb -e "select fecha from kpisdb.sistema where host = $HOST and fecha = $DATE and tipo = $5  ORDER BY fecha DESC LIMIT 1" -N`
+             if [ "$?" -eq 0 ]; then
+                 if [ -n "$RESULT" ]; then
+                 #### ROW NOT EMPTY
+                     log "[CHECK_ROW] KPI insertado el: $DATE para el host $HOST tipo: $5"
+                     CHK_ROW=0
+                 else 
+                 #### ROW EMPTY
+                     log "[CHECK_ROW] KPI NO insertado el: $DATE para el host $HOST tipo: $5"
+                     CHK_ROW=1
+                 fi
+             else
+                  log "[CHECK_ROW] ERROR conectando con $MYSQL_HOST a la base de datos: $MYSQL_DATABASE"
+                  exit 1
+             fi
+         ;;
+        *)
+            log "Tabla no soportada por ahora, Contacte con el adminsitrador del sistema."
+            fin 2 
+         ;;
+    esac
     #items=$(echo $result | tr " " "\n")
  
     #for item in $items
@@ -86,14 +96,22 @@ fin(){
         mv /tmp/$DATE_NOW.sql /home/operaciones/kpis-procesados/$DATE_NOW/
     fi
     #rm /temp/$DATE_NOW.sql
-    if [ $1 -eq 0 ]; then
-        gzip -r /home/operaciones/kpis-procesados/$DATE_NOW/
-        rm sql.log
-        exit 0
-    else 
+    case $1 in
+        0)
+            gzip -r /home/operaciones/kpis-procesados/$DATE_NOW/
+            rm sql.log
+            exit 0
+        ;; 
+        1) 
         mv sql.log /home/operaciones/kpis-procesados/$DATE_NOW/
         exit 1
-    fi
+        ;;
+        *)
+        log "ERROR en ejecucion de script"
+        rm -rf /home/operaciones/kpis-procesados/$DATE_NOW
+        exit 2
+        ;;
+    esac
 }
 
 flush_stdin(){
@@ -115,6 +133,7 @@ for file in $1/*.txt; do
     log "Procesando: $FILE_PROC"
     while read line 
     do
+        TABLA=`echo $line | awk {'print $3'}`
         COLUMN1=`echo $line | awk {'print $5'}`
         COLUMN2=`echo $line | awk {'print $6'}`
         COLUMNS=`echo $COLUMN1 $COLUMN2`
@@ -122,7 +141,7 @@ for file in $1/*.txt; do
         DATE=`echo $COLUMNS | awk -F ',' {'print $2'}`
         TIPO=`echo $COLUMNS | awk -F ',' {'print $3'}`
         VALOR=`echo $COLUMNS | sed 's/)//' |sed 's/;//' | awk -F ',' {'print $4'}`
-	check_row $HOST $DATE $TIPO 
+	check_row $TABLA $HOST $DATE $TIPO 
 	if [ $CHK_ROW == 1 ]; then
             ####
             log "inertar kpi: $line " 
